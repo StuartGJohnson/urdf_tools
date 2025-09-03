@@ -1,0 +1,7 @@
+yourdfpy
+trimesh
+numpy
+matplotlib>=3
+pandas>=1.0
+pyyaml>=5.4.1
+xacro

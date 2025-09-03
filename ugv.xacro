@@ -1,0 +1,490 @@
+<?xml version="1.0"?>
+
+<robot name="differential_drive_robot_4wheel" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+    <xacro:macro name="box_link" params="name length width height density color">
+        <!-- Compute mass -->
+        <xacro:property name="volume" value="${length * width * height}"/>
+        <xacro:property name="mass" value="${density * volume}"/>
+      
+        <!-- Inertia for a box centered at origin -->
+        <xacro:property name="ixx" value="${(1.0/12.0) * mass * (height**2 + width**2)}"/>
+        <xacro:property name="iyy" value="${(1.0/12.0) * mass * (length**2 + height**2)}"/>
+        <xacro:property name="izz" value="${(1.0/12.0) * mass * (length**2 + width**2)}"/>
+      
+        <link name="${name}">
+          <visual>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+              <box size="${length} ${width} ${height}"/>
+            </geometry>
+            <material name="${name}_material">
+              <color rgba="${color}"/>
+            </material>
+          </visual>
+      
+          <collision>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <geometry>
+              <box size="${length} ${width} ${height}"/>
+            </geometry>
+          </collision>
+      
+          <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="${mass}"/>
+            <inertia
+              ixx="${ixx}" ixy="0.0" ixz="0.0"
+              iyy="${iyy}" iyz="0.0"
+              izz="${izz}"/>
+          </inertial>
+        </link>
+    </xacro:macro>
+
+    <xacro:macro name="wheel_link" params="name radius width density color">
+
+        <!-- Volume and mass -->
+        <xacro:property name="volume" value="${pi * radius**2 * width}"/>
+        <xacro:property name="mass" value="${density * volume}"/>
+      
+        <!-- Solid cylinder inertias (rotated about its own Z axis) -->
+        <!-- Assume rotation axis (wheel spin) is along the X axis (due to roll of π/2) -->
+        <xacro:property name="ixx" value="${0.5 * mass * radius**2}"/> <!-- spin axis -->
+        <xacro:property name="iyy" value="${0.25 * mass * radius**2 + (1.0/12.0) * mass * width**2}"/>
+        <xacro:property name="izz" value="${iyy}"/>
+      
+        <link name="${name}">
+          <visual>
+            <origin xyz="0 0 0" rpy="${pi/2} 0 0"/> <!-- roll = pi/2 -->
+            <geometry>
+              <cylinder radius="${radius}" length="${width}"/>
+            </geometry>
+            <material name="${name}_material">
+              <color rgba="${color}"/>
+            </material>
+          </visual>
+      
+          <collision>
+            <origin xyz="0 0 0" rpy="${pi/2} 0 0"/> <!-- roll = pi/2 -->
+            <geometry>
+              <cylinder radius="${radius}" length="${width}"/>
+            </geometry>
+            <surface>
+                <friction>
+                  <ode>
+                    <mu>1.5</mu>
+                    <mu2>0.5</mu2>
+                    <slip1>0.1</slip1>
+                    <slip2>0.3</slip2>
+                  </ode>
+                </friction>
+                <bounce />
+                <contact>
+                  <ode>
+                    <kp>1000.0</kp>
+                    <kd>10.0</kd>
+                  </ode>
+                </contact>
+            </surface>
+          </collision>
+      
+          <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="${mass}"/>
+            <inertia
+              ixx="${ixx}" ixy="0.0" ixz="0.0"
+              iyy="${iyy}" iyz="0.0"
+              izz="${izz}"/>
+          </inertial>
+        </link>
+    </xacro:macro>
+
+
+    <!-- Robot Parameters -->
+    <xacro:property name="velcro_height" value=".006"/>
+
+    <xacro:property name="body_length" value="0.24"/>
+    <xacro:property name="body_width" value="0.120"/>
+    <xacro:property name="body_height" value="0.06"/>
+    <xacro:property name="body_ground_clearance" value="0.021"/>
+    <xacro:property name="body_density" value="2700.0"/> <!-- Aluminum -->
+
+    <xacro:property name="wheel_radius" value="0.039"/>
+    <xacro:property name="wheel_width" value="0.042"/>
+    <xacro:property name="body_wheel_gap" value="0.006"/>
+    <xacro:property name="body_wheel_axle_offset" value="${(wheel_radius-body_ground_clearance) - body_height/2.0}"/>
+    <xacro:property name="wheel_separation" value="${body_width + wheel_width + 2*body_wheel_gap}"/>
+    <xacro:property name="wheel_offset" value="${body_length/2 - wheel_radius}"/>
+    <xacro:property name="wheel_density" value="900"/> <!-- Rubber -->
+ 
+    <xacro:property name="orin_length" value="0.110"/>
+    <xacro:property name="orin_width" value="0.110"/>
+    <xacro:property name="orin_height" value="0.072"/>
+    <xacro:property name="orin_density" value="2700.0"/> <!-- Aluminum -->
+
+    <xacro:property name="battery_length" value="0.095"/>
+    <xacro:property name="battery_width" value="0.190"/>
+    <xacro:property name="battery_height" value="0.027"/>
+    <xacro:property name="battery_density" value="2700.0"/> <!-- aluminum -->
+ 
+    <xacro:property name="lidar_length" value="0.038"/>
+    <xacro:property name="lidar_width" value="0.038"/>
+    <xacro:property name="lidar_height" value="0.035"/>
+    <xacro:property name="lidar_density" value="900.0"/> <!-- plastic-->
+
+    <xacro:property name="d435_length" value="0.024"/>
+    <xacro:property name="d435_width" value="0.090"/>
+    <xacro:property name="d435_height" value="0.025"/>
+    <xacro:property name="d435_density" value="900.0"/> <!-- plastic-->
+
+    <xacro:property name="gps_length" value="0.025"/>
+    <xacro:property name="gps_width" value="0.042"/>
+    <xacro:property name="gps_height" value="0.008"/>
+    <xacro:property name="gps_density" value="900.0"/> <!-- plastic-->
+ 
+    <xacro:property name="body_battery_offset" value="${body_height/2 + battery_height/2 + velcro_height}"/>
+    <xacro:property name="battery_orin_offset" value="${battery_height/2 + orin_height/2 + velcro_height}"/>
+    <xacro:property name="orin_lidar_offset" value="${orin_height/2 + lidar_height/2 + velcro_height}"/>
+    <xacro:property name="orin_d435_offset_x" value="${orin_length/2 + d435_length/2 + velcro_height*2}"/>
+    <xacro:property name="orin_d435_offset_z" value="${orin_height/2 - d435_height/2}"/>
+    <xacro:property name="orin_gps_offset_x" value=".034"/>
+    <xacro:property name="orin_gps_offset_y" value="-${orin_width/2 + gps_width/2}"/>
+    <xacro:property name="orin_gps_offset_z" value="-${orin_height/2 - .020}"/>
+
+    <!-- Control Parameters -->    
+    <xacro:property name="max_linear_acceleration" value="10"/>
+    <xacro:property name="gazebo_diff_drive_fudge" value="1.62"/>
+
+    <!-- Links -->
+
+    <!-- Body Link -->
+    <xacro:box_link name="base_link" length="${body_length}" width="${body_width}" height="${body_height}" density="${body_density}" color="0.0 0.0 0.0 1.0"/>
+    <xacro:box_link name="battery_link" length="${battery_length}" width="${battery_width}" height="${battery_height}" density="${battery_density}" color="0.25 0.25 0.25 1.0"/>
+    <xacro:box_link name="orin_link" length="${orin_length}" width="${orin_width}" height="${orin_height}" density="${orin_density}" color="0.45 0.45 0.45 1.0"/>
+    <xacro:box_link name="lidar_link" length="${lidar_length}" width="${lidar_width}" height="${lidar_height}" density="${lidar_density}" color="0.0 0.0 0.0 1.0"/>
+    <xacro:box_link name="camera_link" length="${d435_length}" width="${d435_width}" height="${d435_height}" density="${d435_density}" color="0.7 0.7 0.7 1.0"/>
+    <xacro:box_link name="gps_link" length="${gps_length}" width="${gps_width}" height="${gps_height}" density="${gps_density}" color="1.0 1.0 1.0 1.0"/>
+
+    <xacro:wheel_link name="left_wheel_link" radius="${wheel_radius}" width="${wheel_width}" density="${wheel_density}" color="0.1 0.1 0.1 1.0"/>
+    <xacro:wheel_link name="right_wheel_link" radius="${wheel_radius}" width="${wheel_width}" density="${wheel_density}" color="0.1 0.1 0.1 1.0"/>
+    <xacro:wheel_link name="left_wheel2_link" radius="${wheel_radius}" width="${wheel_width}" density="${wheel_density}" color="0.1 0.1 0.1 1.0"/>
+    <xacro:wheel_link name="right_wheel2_link" radius="${wheel_radius}" width="${wheel_width}" density="${wheel_density}" color="0.1 0.1 0.1 1.0"/>
+
+    <link name="base_footprint">
+        <inertial>
+          <mass value="0.000001"/>
+          <origin xyz="0 0 0" rpy="0 0 0"/>
+          <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+        </inertial>
+    </link>
+
+    <link name="camera_optical_link"/>
+
+    <!-- Joints -->
+
+    <joint name="base_footprint_joint" type="fixed">
+        <parent link="base_footprint"/>
+        <child link="base_link"/>
+        <origin xyz="0 0 ${body_ground_clearance + body_height/2.0}" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Left Wheel Joint -->
+    <joint name="left_wheel_joint" type="continuous">
+        <origin xyz="-${wheel_offset} ${wheel_separation/2} ${body_wheel_axle_offset}" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="left_wheel_link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="100" velocity="100.0"/>
+        <dynamics damping="1.0" friction="0.1"/>
+    </joint>
+
+    <!-- Right Wheel Joint -->
+    <joint name="right_wheel_joint" type="continuous">
+        <origin xyz="-${wheel_offset} ${-wheel_separation/2} ${body_wheel_axle_offset}" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="right_wheel_link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="100" velocity="100.0"/>
+        <dynamics damping="1.0" friction="0.1"/>
+    </joint>
+
+    <!-- Left Wheel2 Joint -->
+    <joint name="left_wheel2_joint" type="continuous">
+        <origin xyz="${wheel_offset} ${wheel_separation/2} ${body_wheel_axle_offset}" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="left_wheel2_link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="100" velocity="100.0"/>
+        <dynamics damping="1.0" friction="0.1"/>
+    </joint>
+
+    <!-- Right Wheel2 Joint -->
+    <joint name="right_wheel2_joint" type="continuous">
+        <origin xyz="${wheel_offset} ${-wheel_separation/2} ${body_wheel_axle_offset}" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="right_wheel2_link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="100" velocity="100.0"/>
+        <dynamics damping="1.0" friction="0.1"/>
+    </joint>
+
+    <!-- battery joint -->
+    <joint name="battery_joint" type="fixed">
+        <origin xyz=".007 0 ${body_battery_offset}" rpy="0 0 0"/>
+        <parent link="base_link"/>
+        <child link="battery_link"/>
+    </joint>
+
+    <!-- orin joint -->
+    <joint name="orin_joint" type="fixed">
+        <origin xyz=".010 0 ${battery_orin_offset}" rpy="0 0 0"/>
+        <parent link="battery_link"/>
+        <child link="orin_link"/>
+    </joint>
+
+    <!-- lidar joint -->
+    <joint name="lidar_joint" type="fixed">
+        <origin xyz="-.045 0 ${orin_lidar_offset}" rpy="0 0 0"/>
+        <parent link="orin_link"/>
+        <child link="lidar_link"/>
+    </joint>
+
+    <!-- camera joint -->
+    <joint name="d435_joint" type="fixed">
+	    <origin xyz="${orin_d435_offset_x} 0 ${orin_d435_offset_z-.02}" rpy="0 ${35.0*3.1416/180.0} 0"/>
+        <parent link="orin_link"/>
+        <child link="camera_link"/>
+    </joint>
+
+    <!-- optical frame ${-3.1415927/2} 0 ${-3.1415927/2} -->
+    <joint name="camera_optical_joint" type="fixed">
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <parent link="camera_link"/>
+        <child link="camera_optical_link"/>
+    </joint>
+
+    <!-- gps joint -->
+    <joint name="gps_joint" type="fixed">
+        <origin xyz="${orin_gps_offset_x} ${orin_gps_offset_y} ${orin_gps_offset_z}" rpy="0 0 0"/>
+        <parent link="orin_link"/>
+        <child link="gps_link"/>
+    </joint>
+
+    <!-- Gazebo Parameters -->
+    <!--
+    <gazebo reference="base_link">
+        <mu1>1.0</mu1>
+        <mu2>0.5</mu2>
+        <slip1>0.1</slip1>
+        <slip2>0.2</slip2>
+    </gazebo>
+
+    <gazebo reference="right_wheel_link">
+        <mu1>1.0</mu1>
+        <mu2>0.5</mu2>
+        <slip1>0.1</slip1>
+        <slip2>0.2</slip2>
+    </gazebo>
+
+    <gazebo reference="left_wheel_link">
+        <mu1>1.0</mu1>
+        <mu2>0.5</mu2>
+        <slip1>0.1</slip1>
+        <slip2>0.2</slip2>
+    </gazebo>
+
+    <gazebo reference="right_wheel2_link">
+        <mu1>1.0</mu1>
+        <mu2>0.5</mu2>
+        <slip1>0.1</slip1>
+        <slip2>0.2</slip2>
+    </gazebo>
+
+    <gazebo reference="left_wheel2_link">
+        <mu1>1.0</mu1>
+        <mu2>0.5</mu2>
+        <slip1>0.1</slip1>
+        <slip2>0.2</slip2>
+    </gazebo>
+    -->
+
+
+    <!-- Gazebo Plugins -->
+    <gazebo>
+        <plugin filename="gz-sim-diff-drive-system" name="gz::sim::systems::DiffDrive">
+            <right_joint>right_wheel_joint</right_joint>
+            <left_joint>left_wheel_joint</left_joint>
+            <right_joint>right_wheel2_joint</right_joint>
+            <left_joint>left_wheel2_joint</left_joint>
+            <wheel_separation>${wheel_separation*gazebo_diff_drive_fudge}</wheel_separation>
+            <wheel_radius>${wheel_radius}</wheel_radius>
+            <max_linear_acceleration>${max_linear_acceleration}</max_linear_acceleration>
+            <odom_publish_frequency>100</odom_publish_frequency>
+            <topic>cmd_vel</topic>
+            <odom_topic>odom</odom_topic>
+            <frame_id>odom</frame_id>
+            <child_frame_id>base_footprint</child_frame_id>
+            <tf_topic>/tf</tf_topic>
+        </plugin>
+
+        <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+            <topic>joint_states</topic>
+            <joint_name>right_wheel_joint</joint_name>
+            <joint_name>left_wheel_joint</joint_name>
+            <joint_name>right_wheel2_joint</joint_name>
+            <joint_name>left_wheel2_joint</joint_name>       
+        </plugin>
+
+        <!-- <plugin filename="gz-sim-pose-publisher-system"  name="gz::sim::systems::PosePublisher">
+            <publish_model_pose>true</publish_model_pose>
+            <use_pose_vector_msg>true</use_pose_vector_msg>
+            <update_frequency>-1</update_frequency>
+        </plugin> -->
+    </gazebo>
+
+    <!-- Gazebo sensors -->
+
+    <gazebo reference="camera_link">
+      <sensor name="color_camera" type="rgbd_camera">
+        <pose>0.0 0.0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <update_rate>30</update_rate>
+        <topic>/camera</topic>
+        <gz_frame_id>camera_optical_link</gz_frame_id>
+        <camera name="intel_realsense_r200">
+          <horizontal_fov>1.02974</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>200</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <!-- Noise is sampled independently per pixel on each frame.
+                  That pixel's noise value is added to each of its color
+                  channels, which at that point lie in the range [0,1]. -->
+            <mean>0.0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+
+    <xacro:if value='false'>
+    <gazebo reference="camera_link">
+      <sensor name="depth_camera" type="depth_camera">
+        <pose>0 0 0 0 0 0</pose>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <update_rate>30</update_rate>
+        <topic>/camera/depth/image_raw</topic>
+        <gz_frame_id>camera_optical_link</gz_frame_id>
+        <camera name="intel_realsense_r200">
+          <horizontal_fov>1.02974</horizontal_fov>
+          <image>
+            <width>424</width>
+            <height>240</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>200</far>
+          </clip>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.007</stddev>
+          </noise>
+        </camera>
+      </sensor>
+    </gazebo>
+    </xacro:if>
+
+    <gazebo reference="lidar_link">
+      <sensor name='hls_lfcd_lds' type='gpu_lidar'>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+        <pose>0 0 0.012 0 -0 0</pose>
+        <update_rate>10</update_rate>
+        <topic>scan</topic>
+        <gz_frame_id>lidar_link</gz_frame_id>
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>360</samples>
+              <resolution>1.000000</resolution>
+              <min_angle>0.000000</min_angle>
+              <max_angle>6.280000</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.160000</min>
+            <max>10.0</max>
+            <resolution>0.015000</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0.0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+      </sensor>
+    </gazebo>
+
+    <gazebo reference="base_link">
+      <sensor name='ugv_imu' type='imu'>
+        <always_on>true</always_on>
+        <update_rate>20</update_rate>
+        <topic>imu</topic>
+        <gz_frame_id>base_link</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>2e-4</stddev>
+              </noise>
+            </z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </x>
+            <y>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </y>
+            <z>
+              <noise type='gaussian'>
+                <mean>0.0</mean>
+                <stddev>1.7e-2</stddev>
+              </noise>
+            </z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </gazebo>
+
+</robot>
