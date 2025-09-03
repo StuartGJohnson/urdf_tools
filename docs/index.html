@@ -2,13 +2,67 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
-    <style>html,body{margin:0;height:100%} model-viewer{width:100%;height:100vh}</style>
     <title>Robot viewer</title>
+    <script type="module"
+      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+      html, body { margin:0; height:100%; background:#0b0c10; }
+      model-viewer { width:100%; height:100vh; }
+    </style>
   </head>
   <body>
-    <model-viewer src="./ugv.glb" camera-controls auto-rotate ar
-                  environment-image="neutral" shadow-intensity="1">
+    <model-viewer id="mv"
+      src="./robot.glb"
+      camera-controls
+      exposure="0.9"
+      environment-image="neutral"
+      shadow-intensity="1"
+      interaction-prompt="none"
+      disable-zoom
+      style="--poster-color: transparent;">
     </model-viewer>
+
+    <script type="module">
+      const mv = document.getElementById('mv');
+
+      // Config: speeds & angles
+      const degPerSec = 20;          // azimuth speed
+      const basePhi   = 55;          // baseline elevation (deg)
+      const phiAmp    = 15;          // +/- amplitude; stays away from poles
+      const phiHz     = 0.1;         // how fast elevation breathes
+
+      let running = true;
+      let radius = 'auto';           // camera distance
+      let t0;
+
+      // Pause while the user interacts
+      mv.addEventListener('mousedown', () => running = false);
+      mv.addEventListener('touchstart', () => running = false, {passive:true});
+      mv.addEventListener('mouseup',   () => running = true);
+      mv.addEventListener('touchend',  () => running = true);
+
+      // Initialize radius from current camera orbit if supported
+      mv.addEventListener('load', () => {
+        try {
+          const co = mv.getCameraOrbit?.();
+          if (co && typeof co.radius === 'number' && !Number.isNaN(co.radius)) {
+            radius = `${co.radius}m`;
+          }
+        } catch {}
+      });
+
+      function animate(ts) {
+        if (t0 === undefined) t0 = ts;
+        const t = (ts - t0) / 1000;
+
+        if (running) {
+          const theta = (t * degPerSec) % 360;                  // azimuth
+          const phi   = basePhi + phiAmp * Math.sin(2*Math.PI*phiHz*t); // elevation
+          mv.cameraOrbit = `${theta.toFixed(2)}deg ${phi.toFixed(2)}deg ${radius}`;
+        }
+        requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+    </script>
   </body>
 </html>
