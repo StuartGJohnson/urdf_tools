@@ -5,9 +5,11 @@ A collection (>=1) of tools for handy xacro/urdf doings.
 
 ```xacro2mesh.py``` converts a robot xacro file to a .glb file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While not directly viewable in github, this file does contain model appearance data (not just geometry).
 
+## xacro2stl
+
 ```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf  which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While directly viewable in github, this file does not contain model appearance data (just geometry).
 
-### installation
+## Installation
 
 cadquery installation can be quite a challenge. I suggest using mamba (install this), and performing the following incantation to obtain a usable conda env:
 
@@ -17,8 +19,7 @@ Note that if you only wish to run ```xacro2mesh.py```, then you can simply pip i
 
 ```pip install -r requirements.txt```
 
-
-#### personal issues
+### Installation: personal issues
 Note that I had a particular challenge with mamba installed in my system python. This was due to issues with an upgrade from Ubuntu 20.04 to Ubuntu 22.04. I had to cook up a clean conda env/mamba install (thanks GPT4o for the suggestion) which was called ```py310tools```. And so my install incantation was:
 
 ```conda run -n py310tools mamba env create -f environment.yml```
@@ -28,7 +29,7 @@ I then activated this conda env prior to usage:
 ```conda activate urdf_cq```
 
 
-### usage
+## Usage
 
 The python scripts can digest xacro or urdf files:
 
@@ -50,7 +51,7 @@ The glb file can be viewed in github pages or in many 3d viewers. There will be 
 
 Voila!
 
-### Credits/LLM story
+## Credits/LLM story
 
 This code was developed from my concept via GPT5 (OpenAI, August-September 2025). This progressed as follows:
 
