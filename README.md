@@ -3,9 +3,9 @@ A collection (>=1) of tools for handy xacro/urdf doings.
 
 ## xacro2mesh
 
-```xacro2mesh.py``` converts a robot xacro file to a .glb file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robots which contain links to meshes (.stl) files - my initial robot models are entirely constructed from geometric primitives. While not directly viewable in github, this file does contain model appearance data (not just geometry).
+```xacro2mesh.py``` converts a robot xacro file to a .glb file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While not directly viewable in github, this file does contain model appearance data (not just geometry).
 
-```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github. This is particularly useful when writing up a robot project! This tool has not been tested on robots which contain links to meshes (.stl) files - my initial robot models are entirely constructed from geometric primitives. While directly viewable in github, this file does not contain model appearance data (just geometry).
+```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf  which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While directly viewable in github, this file does not contain model appearance data (just geometry).
 
 ### installation
 
@@ -20,7 +20,7 @@ Note that I had a particular challenge with mamba installed in my system python.
 
 I then activated this conda env prior to usage:
 
-```conda activate urdf-cq```
+```conda activate urdf_cq```
 
 
 ### usage
