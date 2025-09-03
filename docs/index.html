@@ -2,10 +2,10 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Robot Viewer (Three.js, non-module)</title>
+    <title>Robot Viewer (Babylon.js)</title>
     <style>
       html,body{margin:0;height:100%;background:#0b0c10}
-      canvas{display:block}
+      #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
       #status{
         position:fixed;left:8px;top:8px;padding:6px 10px;
         font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
@@ -17,130 +17,102 @@
         background:rgba(0,0,0,.4);border-radius:6px;opacity:.8
       }
     </style>
-    <!-- Non-module builds (globals) -->
-    <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.159.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://unpkg.com/three@0.159.0/examples/js/loaders/GLTFLoader.js"></script>
+    <!-- Non-module globals (great for Pages) -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   </head>
   <body>
     <div id="status">Loading…</div>
     <div id="hint">Drag to orbit • Wheel/trackpad to zoom • Shift+drag to pan</div>
+    <canvas id="renderCanvas"></canvas>
 
     <script>
-      const MODEL_FILE = './ugv.glb'; // <<< CHANGE to './ugv.glb' if that's your filename
-      const statusEl = document.getElementById('status');
-      const setStatus = msg => statusEl.textContent = msg;
+      const MODEL_FILE = './ugv.glb'; // <<< change to './ugv.glb' etc.
 
-      // Basic renderer / scene / camera
-      const renderer = new THREE.WebGLRenderer({ antialias:true });
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      document.body.appendChild(renderer.domElement);
+      const setStatus = (s)=>document.getElementById('status').textContent=s;
 
-      const scene = new THREE.Scene();
-      scene.background = new THREE.Color(0x0b0c10);
+      const canvas = document.getElementById('renderCanvas');
+      const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer:true, stencil:true});
+      const scene  = new BABYLON.Scene(engine);
+      scene.clearColor = new BABYLON.Color4(0.043, 0.047, 0.063, 1.0); // #0b0c10
 
-      const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 2000);
-      camera.position.set(2, 1.5, 2);
+      // Camera: ArcRotate = infinite azimuth by default
+      const camera = new BABYLON.ArcRotateCamera("cam",
+        -Math.PI/4,  // alpha (azimuth)
+         Math.PI/3,  // beta  (elevation)
+         3.0,        // radius
+         BABYLON.Vector3.Zero(), scene);
+      camera.lowerBetaLimit = 0.001;
+      camera.upperBetaLimit = Math.PI - 0.001; // avoid the poles
+      camera.wheelDeltaPercentage = 0.02;
+      camera.panningSensibility = 800;
+      camera.attachControl(canvas, true);
 
-      const controls = new THREE.OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.05;
-      controls.enablePan = true;
-      // unbounded azimuth; keep away from exact poles
-      controls.minPolarAngle = 0.0001;
-      controls.maxPolarAngle = Math.PI - 0.0001;
-      controls.minAzimuthAngle = -Infinity;
-      controls.maxAzimuthAngle =  Infinity;
+      // Lights
+      const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0,1,0), scene);
+      hemi.intensity = 0.6;
+      const dir = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.5,-1,-0.6), scene);
+      dir.position = new BABYLON.Vector3(5,10,7);
+      dir.intensity = 1.0;
 
-      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-      const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-      dir.position.set(5,10,7);
-      scene.add(dir);
+      // Ground grid helper
+      const grid = BABYLON.MeshBuilder.CreateGround("grid", {width:10, height:10, subdivisions:20}, scene);
+      const gridMat = new BABYLON.StandardMaterial("gridMat", scene);
+      gridMat.diffuseColor = new BABYLON.Color3(0.12,0.14,0.18);
+      gridMat.specularColor = new BABYLON.Color3(0,0,0);
+      grid.material = gridMat; grid.position.y = -0.001;
 
-      const grid = new THREE.GridHelper(10, 20, 0x334155, 0x1f2937);
-      grid.position.y = -0.001;
-      scene.add(grid);
+      // Fallback box if loading fails
+      const fallback = BABYLON.MeshBuilder.CreateBox("fallback", {width:1, height:0.3, depth:0.6}, scene);
+      fallback.material = new BABYLON.StandardMaterial("fbMat", scene);
+      fallback.material.diffuseColor = new BABYLON.Color3(0.30,0.78,0.31);
+      fallback.setEnabled(false);
 
-      // Fallback cube
-      const fallback = new THREE.Mesh(
-        new THREE.BoxGeometry(1, 0.3, 0.6),
-        new THREE.MeshStandardMaterial({ color: 0x4caf50 })
-      );
-      fallback.visible = false;
-      scene.add(fallback);
-
-      function frameObject(obj) {
-        const box = new THREE.Box3().setFromObject(obj);
-        const size = new THREE.Vector3(); box.getSize(size);
-        const center = new THREE.Vector3(); box.getCenter(center);
-
-        controls.target.copy(center);
-
+      function frameMeshes(meshes) {
+        const min = new BABYLON.Vector3(+Infinity, +Infinity, +Infinity);
+        const max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+        meshes.forEach(m => {
+          if (!m.getBoundingInfo) return;
+          const bi = m.getBoundingInfo();
+          const vmin = bi.boundingBox.minimumWorld, vmax = bi.boundingBox.maximumWorld;
+          min.minimizeInPlace(vmin); max.maximizeInPlace(vmax);
+        });
+        const center = min.add(max).scale(0.5);
+        const size   = max.subtract(min);
         const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
-        const fitHeight = maxDim / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
-        const fitWidth  = fitHeight / camera.aspect;
-        const distance = 1.3 * Math.max(fitHeight, fitWidth);
 
-        const dirVec = new THREE.Vector3(1, 0.5, 1).normalize();
-        camera.position.copy(center).add(dirVec.multiplyScalar(distance));
-        camera.near = Math.max(0.01, distance / 100);
-        camera.far  = Math.max(2000, distance * 100);
-        camera.updateProjectionMatrix();
+        camera.setTarget(center);
+        camera.radius = maxDim * 1.3;
+        camera.lowerRadiusLimit = maxDim * 0.2;
+        camera.upperRadiusLimit = maxDim * 10.0;
+        // If your GLB is Z-up, rotate once:
+        // meshes[0].rotation.x = -Math.PI/2;
       }
 
-      // Start render loop immediately so we see the grid & fallback even if model fails
-      function animate(){
-        controls.update();
-        renderer.render(scene, camera);
-        requestAnimationFrame(animate);
-      }
-      animate();
-      setStatus('JS running… loading model…');
-
-      // Load the GLB
-      const loader = new THREE.GLTFLoader();
-      loader.load(
-        MODEL_FILE + '?v=' + Date.now(), // cache-bust while iterating
-        (gltf) => {
-          setStatus('Loaded model.');
-          const root = gltf.scene;
-          scene.add(root);
-
-          // If your GLB is Z-up, convert once:
-          // root.rotation.x = -Math.PI/2;
-
-          // Validate bbox; show fallback if invalid
-          const box = new THREE.Box3().setFromObject(root);
-          if (![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(Number.isFinite)) {
-            setStatus('Model bbox invalid (NaN/Inf). Showing fallback.');
-            fallback.visible = true;
-            frameObject(fallback);
-          } else {
-            frameObject(root);
-          }
-        },
-        (xhr) => {
-          if (xhr.total) {
-            setStatus(`Loading… ${(xhr.loaded/xhr.total*100).toFixed(1)}%`);
-          } else {
-            setStatus(`Loading… ${Math.round(xhr.loaded/1024)} kB`);
-          }
-        },
-        (err) => {
-          console.error('GLB load error:', err);
-          setStatus('Failed to load model (check filename/path). Showing fallback.');
-          fallback.visible = true;
-          frameObject(fallback);
+      setStatus('Loading model…');
+      BABYLON.SceneLoader.Append("", MODEL_FILE + "?v="+Date.now(), scene, () => {
+        setStatus('Loaded.');
+        const modelMeshes = scene.meshes.filter(m => m.name !== "grid" && m !== camera);
+        if (modelMeshes.length === 0) {
+          setStatus('Model loaded but no meshes found; showing fallback.');
+          fallback.setEnabled(true); frameMeshes([fallback]);
+        } else {
+          frameMeshes(modelMeshes);
         }
-      );
-
-      window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
+      }, (evt) => {
+        if (evt.lengthComputable) {
+          setStatus(`Loading… ${(evt.loaded/evt.total*100).toFixed(1)}%`);
+        } else {
+          setStatus(`Loading… ${Math.round(evt.loaded/1024)} kB`);
+        }
+      }, (scene, message, exception) => {
+        console.error("GLB load error:", message, exception);
+        setStatus('Failed to load model (check filename/path). Showing fallback.');
+        fallback.setEnabled(true); frameMeshes([fallback]);
       });
+
+      window.addEventListener('resize', () => engine.resize());
+      engine.runRenderLoop(() => scene.render());
     </script>
   </body>
 </html>
