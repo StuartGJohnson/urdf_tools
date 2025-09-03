@@ -2,118 +2,77 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Robot Viewer (Three.js)</title>
+    <title>Robot Viewer (Three.js, non-module)</title>
     <style>
       html,body{margin:0;height:100%;background:#0b0c10}
       canvas{display:block}
       #status{
         position:fixed;left:8px;top:8px;padding:6px 10px;
-        font:12px/1.2 system-ui, sans-serif;color:#cfd8dc;
+        font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
         background:rgba(0,0,0,.4);border-radius:6px;z-index:10
       }
       #hint{
         position:fixed;left:8px;bottom:8px;padding:6px 10px;
-        font:12px/1.2 system-ui, sans-serif;color:#cfd8dc;
+        font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
         background:rgba(0,0,0,.4);border-radius:6px;opacity:.8
       }
     </style>
+    <!-- Non-module builds (globals) -->
+    <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.159.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/three@0.159.0/examples/js/loaders/GLTFLoader.js"></script>
   </head>
   <body>
     <div id="status">Loading…</div>
     <div id="hint">Drag to orbit • Wheel/trackpad to zoom • Shift+drag to pan</div>
 
-    <script type="module">
-      const MODEL_FILE = './ugv.glb';  // <-- change to './ugv.glb' if that’s your filename
-
-      // Tip: if you open this via file:// the imports below will fail. Use a local server or GitHub Pages.
-      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
-      import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/controls/OrbitControls.js';
-      import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/GLTFLoader.js';
-
+    <script>
+      const MODEL_FILE = './ugv.glb'; // <<< CHANGE to './ugv.glb' if that's your filename
       const statusEl = document.getElementById('status');
-      const setStatus = (msg) => (statusEl.textContent = msg);
+      const setStatus = msg => statusEl.textContent = msg;
 
-      // Set up renderer
-      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      // Basic renderer / scene / camera
+      const renderer = new THREE.WebGLRenderer({ antialias:true });
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       renderer.setSize(window.innerWidth, window.innerHeight);
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
       document.body.appendChild(renderer.domElement);
 
-      // Scene & camera
       const scene = new THREE.Scene();
       scene.background = new THREE.Color(0x0b0c10);
 
-      const camera = new THREE.PerspectiveCamera(
-        50, window.innerWidth / window.innerHeight, 0.01, 2000
-      );
+      const camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.01, 2000);
       camera.position.set(2, 1.5, 2);
 
-      // Controls: unbounded azimuth
-      const controls = new OrbitControls(camera, renderer.domElement);
+      const controls = new THREE.OrbitControls(camera, renderer.domElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.enablePan = true;
+      // unbounded azimuth; keep away from exact poles
       controls.minPolarAngle = 0.0001;
       controls.maxPolarAngle = Math.PI - 0.0001;
       controls.minAzimuthAngle = -Infinity;
       controls.maxAzimuthAngle =  Infinity;
 
-      // Lights
       scene.add(new THREE.AmbientLight(0xffffff, 0.6));
       const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-      dir.position.set(5, 10, 7);
+      dir.position.set(5,10,7);
       scene.add(dir);
 
-      // Helpers
       const grid = new THREE.GridHelper(10, 20, 0x334155, 0x1f2937);
       grid.position.y = -0.001;
       scene.add(grid);
 
-      // Fallback cube (hidden by default)
-      const fallbackGeom = new THREE.BoxGeometry(1, 0.3, 0.6);
-      const fallbackMat = new THREE.MeshStandardMaterial({ color: 0x4caf50 });
-      const fallbackMesh = new THREE.Mesh(fallbackGeom, fallbackMat);
-      fallbackMesh.visible = false;
-      scene.add(fallbackMesh);
-
-      // Load GLB
-      const loader = new GLTFLoader();
-      loader.load(
-        MODEL_FILE,
-        (gltf) => {
-          setStatus('Loaded model.');
-          const root = gltf.scene;
-          scene.add(root);
-
-          // Frame the model
-          const bbox = new THREE.Box3().setFromObject(root);
-          if (!isFinite(bbox.min.x + bbox.max.x)) {
-            setStatus('Model bbox invalid (NaN/Inf). Showing fallback.');
-            fallbackMesh.visible = true;
-            frameObject(fallbackMesh);
-          } else {
-            frameObject(root, bbox);
-          }
-        },
-        (xhr) => {
-          if (xhr.total) {
-            const pct = (xhr.loaded / xhr.total * 100).toFixed(1);
-            setStatus(`Loading… ${pct}%`);
-          } else {
-            setStatus(`Loading… ${Math.round(xhr.loaded/1024)} kB`);
-          }
-        },
-        (err) => {
-          console.error('GLB load error:', err);
-          setStatus('Failed to load model (check filename/path). Showing fallback.');
-          fallbackMesh.visible = true;
-          frameObject(fallbackMesh);
-        }
+      // Fallback cube
+      const fallback = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 0.3, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0x4caf50 })
       );
+      fallback.visible = false;
+      scene.add(fallback);
 
-      function frameObject(obj, bbox) {
-        const box = bbox || new THREE.Box3().setFromObject(obj);
+      function frameObject(obj) {
+        const box = new THREE.Box3().setFromObject(obj);
         const size = new THREE.Vector3(); box.getSize(size);
         const center = new THREE.Vector3(); box.getCenter(center);
 
@@ -131,17 +90,56 @@
         camera.updateProjectionMatrix();
       }
 
-      // Resize
+      // Start render loop immediately so we see the grid & fallback even if model fails
+      function animate(){
+        controls.update();
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      animate();
+      setStatus('JS running… loading model…');
+
+      // Load the GLB
+      const loader = new THREE.GLTFLoader();
+      loader.load(
+        MODEL_FILE + '?v=' + Date.now(), // cache-bust while iterating
+        (gltf) => {
+          setStatus('Loaded model.');
+          const root = gltf.scene;
+          scene.add(root);
+
+          // If your GLB is Z-up, convert once:
+          // root.rotation.x = -Math.PI/2;
+
+          // Validate bbox; show fallback if invalid
+          const box = new THREE.Box3().setFromObject(root);
+          if (![box.min.x, box.min.y, box.min.z, box.max.x, box.max.y, box.max.z].every(Number.isFinite)) {
+            setStatus('Model bbox invalid (NaN/Inf). Showing fallback.');
+            fallback.visible = true;
+            frameObject(fallback);
+          } else {
+            frameObject(root);
+          }
+        },
+        (xhr) => {
+          if (xhr.total) {
+            setStatus(`Loading… ${(xhr.loaded/xhr.total*100).toFixed(1)}%`);
+          } else {
+            setStatus(`Loading… ${Math.round(xhr.loaded/1024)} kB`);
+          }
+        },
+        (err) => {
+          console.error('GLB load error:', err);
+          setStatus('Failed to load model (check filename/path). Showing fallback.');
+          fallback.visible = true;
+          frameObject(fallback);
+        }
+      );
+
       window.addEventListener('resize', () => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
-      });
-
-      // Render loop
-      renderer.setAnimationLoop(() => {
-        controls.update();
-        renderer.render(scene, camera);
       });
     </script>
   </body>
