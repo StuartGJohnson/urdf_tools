@@ -3,23 +3,23 @@ A collection (>=1) of tools for handy xacro/urdf doings.
 
 ## xacro2mesh
 
-```xacro2mesh.py``` converts a robot xacro file to a .glb file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While not directly viewable in github, this file does contain model appearance data (not just geometry).
+```xacro2mesh.py``` converts a robot xacro file to a to glb/gltf/stl/obj file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf which contains links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. 
 
 ## xacro2stl
 
-```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf  which contain links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. While directly viewable in github, this file does not contain model appearance data (just geometry).
+```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github, but via the cadquery python package. GPT5 had reasons for doing this (see the section on Credits / LLM Story below). This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf  which contains links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. 
 
 ## Installation
 
-cadquery installation can be quite a challenge. I suggest using mamba (install this), and performing the following incantation to obtain a usable conda env:
-
-```mamba env create -f environment.yml```
-
-Note that if you only wish to run ```xacro2mesh.py```, then you can simply pip install via requirements.txt, using a conda environment or venv based on python 3.10:
+If you only wish to run ```xacro2mesh.py```, then you can simply pip install via requirements.txt, using a conda environment or venv based on python 3.10:
 
 ```pip install -r requirements.txt```
 
-### Installation: personal issues
+If you want a cadquery-generated STL via ```xacro2stl_cq.py```, cadquery installation can be quite a challenge. I suggest using mamba (install this), and performing the following incantation to obtain a usable conda env:
+
+```mamba env create -f environment.yml```
+
+### Installation: personal issues (only applies to ```xacro2stl_cq.py```)
 Note that I had a particular challenge with mamba installed in my system python. This was due to issues with an upgrade from Ubuntu 20.04 to Ubuntu 22.04. I had to cook up a clean conda env/mamba install (thanks GPT4o for the suggestion) which was called ```py310tools```. And so my install incantation was:
 
 ```conda run -n py310tools mamba env create -f environment.yml```
@@ -31,17 +31,16 @@ I then activated this conda env prior to usage:
 
 ## Usage
 
-The python scripts can digest xacro or urdf files:
+The python scripts can digest xacro or urdf files. 
 
-```python xacro2mesh.py ugv.xacro -o ugv.glb```
+```python xacro2mesh.py ugv.xacro -o ugv_x.stl --format stl```
+
+```python xacro2mesh.py ugv.xacro -o ugv.glb --glb-convention gltf```
+
+or via the cadquery implementation:
 
 ```python xacro2stl_cq.py ugv.xacro -o ugv.stl```
 
-or
-
-```python xacro2mesh.py ugv.urdf -o ugv.glb```
-
-```python xacro2stl_cq.py ugv.urdf -o ugv.stl```
 
 The .stl file can be linked to your README.md:
 
@@ -65,12 +64,13 @@ This code was developed from my concept via GPT5 (OpenAI, August-September 2025)
 - I ask GPT5 to write a urdf to stl converter.
 - GPT5 makes a minor error in cylinder rendering. I report the specifics of the error.
 - GPT5 fixes the error.
+- GPT5 and I circle on trying to get a javascript viewer working for the glb file. In the process of doing this, we discover that the glb/gltf standard coordinate system does not have z up. So GPT5 suggests a fix which we bake into xacro2mesh.py. In the process of doing this, GPT5 provides a cadquery-free (almost trivial) script which also generates stl files. I asked GPT5 why it was using cadquery in the first place. It mentioned: 1) I mentioned cadquery, and 2) cadquery generates better stl. Sigh.
 
-IMHO: While LLMs can speed up development, the providers of these tools still have a mountain of work to do. Also, we have work to do to learn how to use these tools.
+IMHO: While LLMs can speed up development, the providers of these tools still have a mountain of work to do. AGI? Ha! Also, we have work to do to learn how to use these tools. 
 
 ### GPT5's prompting suggestions
 
-After discovering that github cannot view .glb files, I asked GPT5 to tell me how to prompt it to avoid the situation. The trick is coming up with these early in your project! This is the recipe section it provided (GPT5 (OpenAI, September 2025)):
+After discovering that github cannot view .glb files, I asked GPT5 to tell me how to prompt it to avoid the situation (that is, GPT5 being in error about github file viewing capabilities). The trick is coming up with these early in your project! This is the recipe section it provided (GPT5 (OpenAI, September 2025)):
 
 A quick prompting recipe
 

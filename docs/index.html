@@ -11,24 +11,15 @@
         font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
         background:rgba(0,0,0,.4);border-radius:6px;z-index:10
       }
-      #hint{
-        position:fixed;left:8px;bottom:8px;padding:6px 10px;
-        font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
-        background:rgba(0,0,0,.4);border-radius:6px;opacity:.8
-      }
     </style>
-    <!-- Non-module globals (great for Pages) -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   </head>
   <body>
     <div id="status">Loading…</div>
-    <div id="hint">Drag to orbit • Wheel/trackpad to zoom • Shift+drag to pan</div>
     <canvas id="renderCanvas"></canvas>
-
     <script>
-      const MODEL_FILE = './ugv.glb'; // <<< change to './ugv.glb' etc.
-
+      const MODEL_FILE = './ugv.glb'; // set to your filename (e.g., './ugv.glb')
       const setStatus = (s)=>document.getElementById('status').textContent=s;
 
       const canvas = document.getElementById('renderCanvas');
@@ -36,46 +27,40 @@
       const scene  = new BABYLON.Scene(engine);
       scene.clearColor = new BABYLON.Color4(0.043, 0.047, 0.063, 1.0); // #0b0c10
 
-      // Camera: ArcRotate = infinite azimuth by default
+      // ArcRotateCamera: infinite azimuth; keep elevation away from poles
       const camera = new BABYLON.ArcRotateCamera("cam",
         -Math.PI/4,  // alpha (azimuth)
          Math.PI/3,  // beta  (elevation)
          3.0,        // radius
          BABYLON.Vector3.Zero(), scene);
-      camera.lowerBetaLimit = 0.001;
-      camera.upperBetaLimit = Math.PI - 0.001; // avoid the poles
+      camera.lowerBetaLimit = 0.03;            // keep away from singularities
+      camera.upperBetaLimit = Math.PI - 0.03;
       camera.wheelDeltaPercentage = 0.02;
       camera.panningSensibility = 800;
       camera.attachControl(canvas, true);
 
-      // Lights
+      // Soft lighting; no ground/floor/grid
       const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0,1,0), scene);
-      hemi.intensity = 0.6;
+      hemi.intensity = 0.7;
       const dir = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.5,-1,-0.6), scene);
       dir.position = new BABYLON.Vector3(5,10,7);
-      dir.intensity = 1.0;
+      dir.intensity = 1.1;
 
-      // Ground grid helper
-      const grid = BABYLON.MeshBuilder.CreateGround("grid", {width:10, height:10, subdivisions:20}, scene);
-      const gridMat = new BABYLON.StandardMaterial("gridMat", scene);
-      gridMat.diffuseColor = new BABYLON.Color3(0.12,0.14,0.18);
-      gridMat.specularColor = new BABYLON.Color3(0,0,0);
-      grid.material = gridMat; grid.position.y = -0.001;
-
-      // Fallback box if loading fails
+      // Fallback mesh if loading fails
       const fallback = BABYLON.MeshBuilder.CreateBox("fallback", {width:1, height:0.3, depth:0.6}, scene);
-      fallback.material = new BABYLON.StandardMaterial("fbMat", scene);
-      fallback.material.diffuseColor = new BABYLON.Color3(0.30,0.78,0.31);
-      fallback.setEnabled(false);
+      const fbMat = new BABYLON.StandardMaterial("fbMat", scene);
+      fbMat.diffuseColor = new BABYLON.Color3(0.30,0.78,0.31);
+      fbMat.specularColor = new BABYLON.Color3(0,0,0);
+      fallback.material = fbMat; fallback.setEnabled(false);
 
       function frameMeshes(meshes) {
         const min = new BABYLON.Vector3(+Infinity, +Infinity, +Infinity);
         const max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
         meshes.forEach(m => {
-          if (!m.getBoundingInfo) return;
-          const bi = m.getBoundingInfo();
-          const vmin = bi.boundingBox.minimumWorld, vmax = bi.boundingBox.maximumWorld;
-          min.minimizeInPlace(vmin); max.maximizeInPlace(vmax);
+          const bi = m.getBoundingInfo?.();
+          if (!bi) return;
+          const a = bi.boundingBox.minimumWorld, b = bi.boundingBox.maximumWorld;
+          min.minimizeInPlace(a); max.maximizeInPlace(b);
         });
         const center = min.add(max).scale(0.5);
         const size   = max.subtract(min);
@@ -85,14 +70,18 @@
         camera.radius = maxDim * 1.3;
         camera.lowerRadiusLimit = maxDim * 0.2;
         camera.upperRadiusLimit = maxDim * 10.0;
-        // If your GLB is Z-up, rotate once:
-        // meshes[0].rotation.x = -Math.PI/2;
       }
 
       setStatus('Loading model…');
       BABYLON.SceneLoader.Append("", MODEL_FILE + "?v="+Date.now(), scene, () => {
         setStatus('Loaded.');
-        const modelMeshes = scene.meshes.filter(m => m.name !== "grid" && m !== camera);
+        const modelMeshes = scene.meshes.filter(m => m !== camera && m !== fallback);
+
+        // IMPORTANT: If you exported GLB with --glb-convention gltf or y_up,
+        // you should NOT need to rotate here. If you exported with 'urdf'
+        // and see a sideways model, uncomment the next line to convert Z-up→Y-up:
+        // modelMeshes.forEach(m => m.rotation.x = -Math.PI / 2);
+
         if (modelMeshes.length === 0) {
           setStatus('Model loaded but no meshes found; showing fallback.');
           fallback.setEnabled(true); frameMeshes([fallback]);

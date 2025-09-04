@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 """
-xacro2mesh.py — Convert Xacro/URDF → GLB (default) or STL for GitHub-friendly viewing.
+xacro2mesh.py — Convert Xacro/URDF → GLB (default), GLTF, STL, or OBJ.
 
 Deps:
   pip install yourdfpy trimesh numpy
-  # ensure xacro CLI exists (for .xacro files):
+  # for .xacro:
   #   sudo apt install ros-$ROS_DISTRO-xacro
-  #   or: pip install xacro
+  #   or: pip install xacro  (ensure `xacro` on PATH)
+
+Key options:
+  --glb-convention {gltf,y_up,urdf}
+    - "gltf" (default): bake URDF axes (Z-up, X-forward) into glTF axes
+      (Y-up, Z-forward) via a fixed root transform (applied to geometry here).
+    - "y_up": only map Z-up → Y-up (keep X-forward).
+    - "urdf": no axis change; export "as-URDF".
+  Note: axis conversion is applied ONLY for GLB/GLTF exports (not STL/OBJ).
 """
 
 import argparse
@@ -156,6 +164,8 @@ def compute_fk(robot: URDF, cfg: Dict[str, float]) -> Dict[str, np.ndarray]:
     return T_links
 
 
+# ------------------------- geometry → trimesh -------------------------
+
 def load_meshes_from_mesh_desc(mesh_desc) -> trimesh.Trimesh:
     """
     yourdfpy mesh wrapper can have .filename/.filenames and .scale/.scales.
@@ -192,17 +202,15 @@ def load_meshes_from_mesh_desc(mesh_desc) -> trimesh.Trimesh:
 
 def geom_to_trimesh(geometry, *, segments: int, sphere_subdiv: int, verbose: bool=False) -> trimesh.Trimesh:
     """
-    Convert yourdfpy Visual.geometry wrapper (preferred) or primitive-like object into a trimesh.
+    Convert yourdfpy Visual.geometry wrapper into a trimesh.
     Handles:
       - geometry.box.size
       - geometry.cylinder.radius/length
       - geometry.sphere.radius
       - geometry.mesh.filename(s) [+ scale(s)]
-    Falls back to duck-typing if it's already a primitive object.
     """
     g = geometry
 
-    # yourdfpy wrapper path
     box = getattr(g, "box", None)
     if box is not None:
         size = np.array(getattr(box, "size"), dtype=float)
@@ -223,20 +231,12 @@ def geom_to_trimesh(geometry, *, segments: int, sphere_subdiv: int, verbose: boo
     if mesh_desc is not None:
         return load_meshes_from_mesh_desc(mesh_desc)
 
-    # Duck-typing fallback (just in case)
-    if hasattr(g, "size"):
-        return tm_box(extents=np.array(g.size, dtype=float))
-    if hasattr(g, "radius") and hasattr(g, "length"):
-        return tm_cylinder(radius=float(g.radius), height=float(g.length), sections=max(8, int(segments)))
-    if hasattr(g, "radius"):
-        return tm_icosphere(subdivisions=max(1, int(sphere_subdiv)), radius=float(g.radius))
-    if hasattr(g, "filename") or hasattr(g, "filenames"):
-        return load_meshes_from_mesh_desc(g)
-
     if verbose:
         print(f"[WARN] Unsupported geometry wrapper: {type(g)}; attrs={dir(g)}", file=sys.stderr)
     raise TypeError(f"Unsupported geometry structure: {type(g)}")
 
+
+# ------------------------- I/O -------------------------
 
 def xacro_cli_to_temp_urdf(xacro_path: Path) -> Path:
     """Run `xacro <file>` and write the resulting URDF to a temporary file. Return its path."""
@@ -268,6 +268,8 @@ def load_urdf_model(path: Path) -> URDF:
         return model
     return URDF.load(str(path))
 
+
+# ------------------------- scene assembly -------------------------
 
 def build_scene_from_urdf(
     robot: URDF,
@@ -322,6 +324,43 @@ def build_scene_from_urdf(
     return scene, fused
 
 
+# ------------------------- axis conventions for GLB -------------------------
+
+def _Rx(angle_rad: float) -> np.ndarray:
+    c, s = math.cos(angle_rad), math.sin(angle_rad)
+    return np.array([[1,0,0,0],[0,c,-s,0],[0,s,c,0],[0,0,0,1]], dtype=float)
+
+def _Ry(angle_rad: float) -> np.ndarray:
+    c, s = math.cos(angle_rad), math.sin(angle_rad)
+    return np.array([[c,0,s,0],[0,1,0,0],[-s,0,c,0],[0,0,0,1]], dtype=float)
+
+def axes_transform(matrix_name: str) -> np.ndarray:
+    """
+    Return a 4×4 to convert URDF axes to desired GLB convention.
+    - 'urdf': identity (Z-up, X-forward).
+    - 'y_up': Rx(-90°) → Z-up → Y-up (keeps X-forward).
+    - 'gltf': Ry(+90°) @ Rx(-90°) → Z-up/X-forward → Y-up/Z-forward (glTF canonical).
+    """
+    if matrix_name == "urdf":
+        return np.eye(4)
+    if matrix_name == "y_up":
+        return _Rx(-math.pi/2.0)
+    if matrix_name == "gltf":
+        return _Ry(+math.pi/2.0) @ _Rx(-math.pi/2.0)
+    raise ValueError(f"Unknown glb-convention: {matrix_name}")
+
+
+def apply_axes_to_scene(scene: trimesh.Scene, fused: Optional[trimesh.Trimesh], conv: str):
+    """Bake axis transform into geometry (simplest, robust across viewers/exporters)."""
+    T = axes_transform(conv)
+    if conv == "urdf":
+        return
+    for geom in scene.geometry.values():
+        geom.apply_transform(T)
+    if fused is not None:
+        fused.apply_transform(T)
+
+
 # ------------------------- CLI -------------------------
 
 def main():
@@ -335,10 +374,17 @@ def main():
     ap.add_argument("--segments", type=int, default=24, help="Cylinder tessellation")
     ap.add_argument("--sphere-subdiv", type=int, default=3, help="Sphere tessellation (icosphere subdivisions)")
     ap.add_argument("--joint", action="append", default=[], metavar="NAME=DEG",
-                    help="Set a joint angle in degrees (repeatable): --joint shoulder=15 --joint elbow=-30")
+                    help="Set a revolute/continuous joint angle in degrees (repeatable): --joint shoulder=15")
     ap.add_argument("--center", action="store_true", help="Center model at origin before export")
     ap.add_argument("--scale", type=float, default=1.0, help="Uniform scale at the end (URDF uses meters)")
     ap.add_argument("--verbose", action="store_true", help="Print geometry types / skipped visuals")
+    ap.add_argument("--glb-convention",
+                    choices=["gltf", "y_up", "urdf"], default="gltf",
+                    help=("Axis convention for GLB/GLTF export:\n"
+                          " - gltf (default): Y-up, Z-forward (URDF→glTF: Rx(-90°) then Ry(+90°))\n"
+                          " - y_up: only map Z-up→Y-up (Rx(-90°)); keep X-forward\n"
+                          " - urdf: no change (Z-up, X-forward).\n"
+                          "Note: Applied only for GLB/GLTF; STL/OBJ remain 'urdf' axes."))
     args = ap.parse_args()
 
     if not args.input.exists():
@@ -347,7 +393,7 @@ def main():
 
     robot = load_urdf_model(args.input)
 
-    # Parse joint overrides (deg → rad). For prismatic meters, just add a --joint-lin if you need it later.
+    # Parse joint overrides (deg → rad)
     joint_rad = parse_joint_overrides(args.joint)
 
     scene, fused = build_scene_from_urdf(
@@ -366,7 +412,10 @@ def main():
         for geom in scene.geometry.values():
             geom.apply_scale(args.scale)
 
+    # Export
     if args.format in ("glb", "gltf"):
+        # Apply axis convention (baked into geometry for robust viewing)
+        apply_axes_to_scene(scene, fused, args.glb_convention)
         data = scene.export(file_type=args.format)
         if isinstance(data, (bytes, bytearray)):
             out_path.write_bytes(data)
@@ -377,6 +426,7 @@ def main():
         if mesh is None:
             print("WARNING: No geometry to export.", file=sys.stderr)
             sys.exit(0)
+        # STL/OBJ remain in URDF axes by design
         mesh.export(out_path, file_type=args.format)
     else:
         print(f"ERROR: Unsupported format: {args.format}", file=sys.stderr)
