@@ -56,22 +56,35 @@
       fallback.setEnabled(true);  // visible until GLB loads
 
       function frame(meshes) {
-        const min = new BABYLON.Vector3(+Infinity, +Infinity, +Infinity);
-        const max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
-        meshes.forEach(m=>{
-          const bi = m.getBoundingInfo?.();
-          if (!bi) return;
-          min.minimizeInPlace(bi.boundingBox.minimumWorld);
-          max.maximizeInPlace(bi.boundingBox.maximumWorld);
-        });
-        const center = min.add(max).scale(0.5);
-        const size   = max.subtract(min);
-        const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
+          // Compute world-space AABB of the model
+          const min = new BABYLON.Vector3(+Infinity, +Infinity, +Infinity);
+          const max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
+          meshes.forEach(m => {
+              const bi = m.getBoundingInfo?.();
+              if (!bi) return;
+              min.minimizeInPlace(bi.boundingBox.minimumWorld);
+              max.maximizeInPlace(bi.boundingBox.maximumWorld);
+          });
 
-        cam.setTarget(center);
-        cam.radius = maxDim * 1.3;
-        cam.lowerRadiusLimit = maxDim * 0.2;
-        cam.upperRadiusLimit = maxDim * 10.0;
+          const center = min.add(max).scale(0.5);
+          const size   = max.subtract(min);
+          const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
+
+          // Put camera back far enough to see the whole object
+          cam.setTarget(center);
+          cam.radius = Math.max(maxDim * 1.3, 0.001);
+
+          // === CRITICAL: frustum near/far ===
+          // Near should be tiny relative to your working scale but not so small it wrecks depth precision.
+          // Far should be comfortably beyond the model extents at current radius.
+          const near = Math.max(1e-4, cam.radius / 2000);   // e.g. 0.0005 when radius=1.0
+          const far  = Math.max(10.0, cam.radius * 2000);   // e.g. 2000 when radius=1.0
+          cam.minZ = near;
+          cam.maxZ = far;
+
+          // Optional: zoom/pan limits that scale with the model
+          cam.lowerRadiusLimit = maxDim * 0.05;
+          cam.upperRadiusLimit = maxDim * 50.0;
       }
 
       // Start render loop immediately (shows fallback cube even if GLB fails)

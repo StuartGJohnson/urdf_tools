@@ -28,7 +28,6 @@ I then activated this conda env prior to usage:
 
 ```conda activate urdf_cq```
 
-
 ## Usage
 
 The python scripts can digest xacro or urdf files. 
