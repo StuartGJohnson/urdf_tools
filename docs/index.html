@@ -2,106 +2,114 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Robot Viewer (Babylon.js)</title>
+    <title>Robot Viewer (Babylon.js diag)</title>
     <style>
       html,body{margin:0;height:100%;background:#0b0c10}
       #renderCanvas{width:100%;height:100%;display:block;touch-action:none}
       #status{
-        position:fixed;left:8px;top:8px;padding:6px 10px;
-        font:12px/1.2 system-ui,sans-serif;color:#cfd8dc;
-        background:rgba(0,0,0,.4);border-radius:6px;z-index:10
+        position:fixed;left:8px;top:8px;padding:8px 12px;max-width:60ch;
+        font:12px/1.35 system-ui,sans-serif;color:#e5eef5;
+        background:rgba(0,0,0,.55);border-radius:8px;z-index:10;white-space:pre-wrap
       }
     </style>
+    <!-- Non-module globals (safest for GH Pages) -->
     <script src="https://cdn.babylonjs.com/babylon.js"></script>
     <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
   </head>
   <body>
-    <div id="status">Loading…</div>
+    <div id="status">Booting…</div>
     <canvas id="renderCanvas"></canvas>
-    <script>
-      const MODEL_FILE = './ugv.glb'; // set to your filename (e.g., './ugv.glb')
-      const setStatus = (s)=>document.getElementById('status').textContent=s;
 
+    <script>
+      // >>>> CHANGE THIS TO YOUR FILE NAME <<<<
+      const MODEL_FILE = './ugv.glb';  // e.g., './ugv.glb'
+
+      const S = document.getElementById('status');
+      const log = (...a)=>{ console.log(...a); S.textContent = a.join(' ') };
+      const append = (...a)=>{ console.log(...a); S.textContent += '\n' + a.join(' ') };
+
+      // Basic engine/scene/camera
       const canvas = document.getElementById('renderCanvas');
       const engine = new BABYLON.Engine(canvas, true, {preserveDrawingBuffer:true, stencil:true});
       const scene  = new BABYLON.Scene(engine);
-      scene.clearColor = new BABYLON.Color4(0.043, 0.047, 0.063, 1.0); // #0b0c10
+      scene.clearColor = new BABYLON.Color4(0.043,0.047,0.063,1.0); // #0b0c10
 
-      // ArcRotateCamera: infinite azimuth; keep elevation away from poles
-      const camera = new BABYLON.ArcRotateCamera("cam",
-        -Math.PI/4,  // alpha (azimuth)
-         Math.PI/3,  // beta  (elevation)
-         3.0,        // radius
-         BABYLON.Vector3.Zero(), scene);
-      camera.lowerBetaLimit = 0.03;            // keep away from singularities
-      camera.upperBetaLimit = Math.PI - 0.03;
-      camera.wheelDeltaPercentage = 0.02;
-      camera.panningSensibility = 800;
-      camera.attachControl(canvas, true);
+      const cam = new BABYLON.ArcRotateCamera("cam", -Math.PI/4, Math.PI/3, 3.0, BABYLON.Vector3.Zero(), scene);
+      cam.lowerBetaLimit = 0.03;
+      cam.upperBetaLimit = Math.PI - 0.03;
+      cam.wheelDeltaPercentage = 0.02;
+      cam.panningSensibility = 800;
+      cam.attachControl(canvas, true);
 
-      // Soft lighting; no ground/floor/grid
       const hemi = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0,1,0), scene);
       hemi.intensity = 0.7;
       const dir = new BABYLON.DirectionalLight("dir", new BABYLON.Vector3(-0.5,-1,-0.6), scene);
       dir.position = new BABYLON.Vector3(5,10,7);
       dir.intensity = 1.1;
 
-      // Fallback mesh if loading fails
+      // Always-visible fallback so screen is never blank
       const fallback = BABYLON.MeshBuilder.CreateBox("fallback", {width:1, height:0.3, depth:0.6}, scene);
       const fbMat = new BABYLON.StandardMaterial("fbMat", scene);
       fbMat.diffuseColor = new BABYLON.Color3(0.30,0.78,0.31);
       fbMat.specularColor = new BABYLON.Color3(0,0,0);
-      fallback.material = fbMat; fallback.setEnabled(false);
+      fallback.material = fbMat;
+      fallback.setEnabled(true);  // visible until GLB loads
 
-      function frameMeshes(meshes) {
+      function frame(meshes) {
         const min = new BABYLON.Vector3(+Infinity, +Infinity, +Infinity);
         const max = new BABYLON.Vector3(-Infinity, -Infinity, -Infinity);
-        meshes.forEach(m => {
+        meshes.forEach(m=>{
           const bi = m.getBoundingInfo?.();
           if (!bi) return;
-          const a = bi.boundingBox.minimumWorld, b = bi.boundingBox.maximumWorld;
-          min.minimizeInPlace(a); max.maximizeInPlace(b);
+          min.minimizeInPlace(bi.boundingBox.minimumWorld);
+          max.maximizeInPlace(bi.boundingBox.maximumWorld);
         });
         const center = min.add(max).scale(0.5);
         const size   = max.subtract(min);
         const maxDim = Math.max(size.x, size.y, size.z) || 1.0;
 
-        camera.setTarget(center);
-        camera.radius = maxDim * 1.3;
-        camera.lowerRadiusLimit = maxDim * 0.2;
-        camera.upperRadiusLimit = maxDim * 10.0;
+        cam.setTarget(center);
+        cam.radius = maxDim * 1.3;
+        cam.lowerRadiusLimit = maxDim * 0.2;
+        cam.upperRadiusLimit = maxDim * 10.0;
       }
 
-      setStatus('Loading model…');
-      BABYLON.SceneLoader.Append("", MODEL_FILE + "?v="+Date.now(), scene, () => {
-        setStatus('Loaded.');
-        const modelMeshes = scene.meshes.filter(m => m !== camera && m !== fallback);
+      // Start render loop immediately (shows fallback cube even if GLB fails)
+      engine.runRenderLoop(()=>scene.render());
+      window.addEventListener('resize', ()=>engine.resize());
 
-        // IMPORTANT: If you exported GLB with --glb-convention gltf or y_up,
-        // you should NOT need to rotate here. If you exported with 'urdf'
-        // and see a sideways model, uncomment the next line to convert Z-up→Y-up:
-        // modelMeshes.forEach(m => m.rotation.x = -Math.PI / 2);
+      // Report engine info
+      append('Renderer:', engine.description || 'OK', '| WebGL:', engine.webGLVersion);
 
-        if (modelMeshes.length === 0) {
-          setStatus('Model loaded but no meshes found; showing fallback.');
-          fallback.setEnabled(true); frameMeshes([fallback]);
+      // Load GLB (cache-busted)
+      log('Loading model…', MODEL_FILE);
+      BABYLON.SceneLoader.Append("", MODEL_FILE + '?v=' + Date.now(), scene, () => {
+        append('Model loaded.');
+
+        // Hide fallback if we actually got meshes
+        const meshes = scene.meshes.filter(m => m !== cam && m !== fallback);
+        if (meshes.length > 0) {
+          fallback.setEnabled(false);
+          // If you exported with --glb-convention gltf/y_up, no rotation needed.
+          // If you exported in URDF axes and it's sideways, uncomment:
+          // meshes.forEach(m => m.rotation.x = -Math.PI/2);
+
+          frame(meshes);
         } else {
-          frameMeshes(modelMeshes);
+          append('Loaded, but found 0 meshes. Keeping fallback visible.');
+          frame([fallback]);
         }
-      }, (evt) => {
-        if (evt.lengthComputable) {
-          setStatus(`Loading… ${(evt.loaded/evt.total*100).toFixed(1)}%`);
-        } else {
-          setStatus(`Loading… ${Math.round(evt.loaded/1024)} kB`);
-        }
-      }, (scene, message, exception) => {
-        console.error("GLB load error:", message, exception);
-        setStatus('Failed to load model (check filename/path). Showing fallback.');
-        fallback.setEnabled(true); frameMeshes([fallback]);
+      },
+      (evt) => {
+        if (evt.lengthComputable) append(`Progress: ${(evt.loaded/evt.total*100).toFixed(1)}%`);
+        else append(`Progress: ${Math.round(evt.loaded/1024)} kB`);
+      },
+      (scene, message, exception) => {
+        console.error('GLB load error:', message, exception);
+        append('ERROR:', message);
+        append('Showing fallback cube. Check filename/path & case.');
+        frame([fallback]);
       });
-
-      window.addEventListener('resize', () => engine.resize());
-      engine.runRenderLoop(() => scene.render());
     </script>
   </body>
 </html>

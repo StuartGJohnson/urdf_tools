@@ -5,7 +5,7 @@ A collection (>=1) of tools for handy xacro/urdf doings.
 
 ```xacro2mesh.py``` converts a robot xacro file to a to glb/gltf/stl/obj file for viewing in ... various ways. This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf which contains links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. 
 
-## xacro2stl
+## xacro2stl_cq
 
 ```xacro2stl_cq.py``` converts a robot xacro file to a .stl file for viewing directly in github, but via the cadquery python package. GPT5 had reasons for doing this (see the section on Credits / LLM Story below). This is particularly useful when writing up a robot project! This tool has not been tested on robot xacro/urdf  which contains links to mesh (.stl) files - my initial robot models are entirely constructed from geometric primitives. 
 
