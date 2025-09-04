@@ -56,7 +56,7 @@ Voila!
 This code was developed from my concept via GPT5 (OpenAI, August-September 2025). This progressed as follows:
 
 - I suggested to GPT5 that it would be useful to have a tool which converted xacro robot files to something viewable in github. I suggested perhaps an .stl file (via the python package cadquery), since I have had some luck with that. I first asked for comments.
-- GPT5 suggested using urdfpy and generating a .glb file. This would retain the appearance of the robot as specified in the xacro file. Other suggestions included using blender. But, I only resort to GUIs when absolutely necessary or appropriate. I asked GPT5 to generate the urdfpy-based code. It turns out GPT5 was in error about .glb file viewing being supported by github: github does not support .glb file viewing. It is critical to have GPT5 check its assumptions at this phase of a project!
+- GPT5 suggested using urdfpy and generating a .glb file. This would retain the appearance of the robot as specified in the xacro file. Other suggestions included using blender. But, I only resort to GUIs when absolutely necessary or appropriate. I asked GPT5 to generate the urdfpy-based code. It turns out GPT5 was in error about .glb file viewing being supported by github: github does not support .glb file viewing. It is critical to have GPT5 check its assumptions at this phase of a project! It also turns out you really don't need cadquery to produce an stl file. Read on.
 - I attempted to pip install urdfpy, but could never resolve conflicts in dependencies. I told GPT5 this.
 - GPT5 suggested some install alternatives. I could not get these to work. I informed GPT5.
 - GPT5 suggested using yourdfpy, which did pip install successfully.
