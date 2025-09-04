@@ -45,7 +45,8 @@ The .stl file can be linked to your README.md:
 
 [▶️ View the robot in 3D](./ugv.stl)
 
-The glb file can be viewed in github pages or in many 3d viewers. There will be a companion github page showing this.
+The glb file can be viewed in github pages. For example:
+[▶️ View the robot in 3D](https://stuartgjohnson.github.io/urdf_tools/)
 
 Voila!
 
